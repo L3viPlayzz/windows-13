@@ -1,5 +1,3 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
 // Memory-based storage voor demo (reset bij elke cold start)
 let enrolledFaceImage: string | null = null;
 let enrolledFaceSignature: number[] | null = null;
@@ -35,54 +33,27 @@ function compareSignatures(sig1: number[], sig2: number[]): number {
   return Math.max(0, Math.min(1, 1 - totalDiff / maxPossibleDiff));
 }
 
-// API handler
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (req.method === "POST") {
-      const { action, imageBase64 } = req.body as { action: string; imageBase64?: string };
+export async function enrollFace(imageBase64: string) {
+  enrolledFaceImage = imageBase64;
+  enrolledFaceSignature = extractImageSignature(imageBase64);
+  return { success: true };
+}
 
-      if (!action) {
-        return res.status(400).json({ success: false, message: "Missing action parameter" });
-      }
-
-      switch (action) {
-        case "enroll":
-          if (!imageBase64) return res.status(400).json({ success: false, message: "Missing imageBase64" });
-          enrolledFaceImage = imageBase64;
-          enrolledFaceSignature = extractImageSignature(imageBase64);
-          return res.status(200).json({ success: true, message: "Face enrolled successfully" });
-
-        case "verify":
-          if (!enrolledFaceImage || !enrolledFaceSignature) {
-            return res.status(400).json({ success: false, message: "No face enrolled yet" });
-          }
-          if (!imageBase64) return res.status(400).json({ success: false, message: "Missing imageBase64" });
-
-          const currentSignature = extractImageSignature(imageBase64);
-          const similarity = compareSignatures(enrolledFaceSignature, currentSignature);
-          const threshold = 0.75;
-          const isSamePerson = similarity >= threshold;
-
-          return res.status(200).json({
-            success: true,
-            isSamePerson,
-            similarity: Math.round(similarity * 100) / 100,
-            message: isSamePerson ? "Face verified successfully!" : "Face does not match the enrolled face."
-          });
-
-        case "clear":
-          enrolledFaceImage = null;
-          enrolledFaceSignature = null;
-          return res.status(200).json({ success: true, message: "Enrolled face cleared" });
-
-        default:
-          return res.status(400).json({ success: false, message: "Unknown action" });
-      }
-    } else {
-      return res.status(405).json({ success: false, message: "Method not allowed" });
-    }
-  } catch (err: any) {
-    console.error("Face verification error:", err);
-    return res.status(500).json({ success: false, message: err.message || "Unknown error" });
+export async function verifyFace(imageBase64: string) {
+  if (!enrolledFaceImage || !enrolledFaceSignature) {
+    return { success: false, message: "No face enrolled" };
   }
+  const currentSignature = extractImageSignature(imageBase64);
+  const similarity = compareSignatures(enrolledFaceSignature, currentSignature);
+  const isSamePerson = similarity >= 0.75;
+  return { success: true, isSamePerson, similarity };
+}
+
+export async function isEnrolled() {
+  return !!enrolledFaceImage;
+}
+
+export async function clearEnrolledFace() {
+  enrolledFaceImage = null;
+  enrolledFaceSignature = null;
 }
